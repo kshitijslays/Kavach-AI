@@ -126,8 +126,12 @@ export const uploadEmergencyAudio = async (req, res) => {
 
     const uploadResult = await cloudinary.uploader.upload(dataURI, { resource_type: "video", folder: "emergency_audio" });
     const audioUrl = uploadResult.secure_url.replace('/upload/', '/upload/f_mp3/');
+    console.log(`🎙️ [AUDIO] Uploaded to Cloudinary: ${audioUrl}`);
 
-    if (!client) return res.status(500).json({ message: "Twilio uninitialized" });
+    if (!client) {
+      console.error("❌ Twilio client uninitialized during audio upload.");
+      return res.status(500).json({ message: "Twilio uninitialized" });
+    }
 
     const msg = `🚨 FOLLOW UP: Emergency audio recording:\n${audioUrl}`;
     const results = [];
@@ -137,8 +141,10 @@ export const uploadEmergencyAudio = async (req, res) => {
       try {
         await client.messages.create({ body: msg, from: twilioNumber, to: e164Number });
         results.push({ contact: contact.name, status: 'success' });
+        console.log(`   ✅ [AUDIO SMS] Sent to ${contact.name}`);
       } catch (err) {
         results.push({ contact: contact.name, status: 'error', error: err.message });
+        console.error(`   ❌ [AUDIO SMS] Failed for ${contact.name}:`, err.message);
       }
     }
 

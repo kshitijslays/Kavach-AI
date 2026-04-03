@@ -131,6 +131,36 @@ void onStart(ServiceInstance service) async {
 
   bool _isSequenceRunning = false;
 
+  // Refactored background recording to be a helper
+  Future<void> _recordBackgroundAudio(String token, List<dynamic> contacts, ApiService apiService) async {
+    final record = AudioRecorder();
+    try {
+      if (await record.hasPermission()) {
+        final dir = await getTemporaryDirectory();
+        final filePath = '${dir.path}/emergency_audio_bg_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+        await record.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: filePath);
+        debugPrint('🎙️ [BG] Recording emergency audio...');
+
+        await Future.delayed(const Duration(seconds: 30));
+
+        final path = await record.stop();
+        if (path != null) {
+          debugPrint('🎙️ [BG] Recording finished, uploading...');
+          await apiService.uploadEmergencyAudio(token, path, contacts);
+          debugPrint('✅ [BG] Audio uploaded to Cloudinary/SMS');
+          try {
+            await File(path).delete();
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('🎙️ [BG] Recording error: $e');
+    } finally {
+      record.dispose();
+    }
+  }
+
   // Forward declaration of trigger sequence to avoid duplication
   Future<void> triggerEmergencySequence() async {
     if (_isSequenceRunning) {
@@ -167,8 +197,9 @@ void onStart(ServiceInstance service) async {
 
       if (token != null && contacts.isNotEmpty) {
         final apiService = ApiService();
-        debugPrint('🚨 [BG] Triggering alert for ${contacts.length} contacts...');
-        
+        // Start audio recording in background immediately
+        _recordBackgroundAudio(token, contacts, apiService);
+
         await apiService.triggerEmergencyAlert(token, {
           'userId': userEmail ?? 'unknown_user',
           'location': {
@@ -196,34 +227,6 @@ void onStart(ServiceInstance service) async {
             ),
           ),
         );
-
-        // Start audio recording in background
-        final record = AudioRecorder();
-        try {
-          if (await record.hasPermission()) {
-            final dir = await getTemporaryDirectory();
-            final filePath = '${dir.path}/emergency_audio_bg_${DateTime.now().millisecondsSinceEpoch}.m4a';
-
-            await record.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: filePath);
-            debugPrint('🎙️ [BG] Recording emergency audio...');
-
-            await Future.delayed(const Duration(seconds: 30));
-
-            final path = await record.stop();
-            if (path != null) {
-              debugPrint('🎙️ [BG] Recording finished, uploading...');
-              await apiService.uploadEmergencyAudio(token, path, contacts);
-              debugPrint('✅ [BG] Audio uploaded to Cloudinary/SMS');
-              try {
-                await File(path).delete();
-              } catch (_) {}
-            }
-          }
-        } catch (e) {
-          debugPrint('🎙️ [BG] Recording error: $e');
-        } finally {
-          record.dispose();
-        }
       }
     } catch (e) {
       debugPrint('SOS Background Error: $e');
@@ -231,6 +234,7 @@ void onStart(ServiceInstance service) async {
       _isSequenceRunning = false;
     }
   }
+
 
   service.on('set_foreground').listen((event) {
     if (event != null && event['isForeground'] != null) {

@@ -88,7 +88,7 @@ class ApiService {
     request.fields['contacts'] = jsonEncode(contacts);
     request.files.add(await http.MultipartFile.fromPath('audio', filePath));
     
-    final streamedResponse = await request.send();
+    final streamedResponse = await request.send().timeout(const Duration(seconds: 45));
     final response = await http.Response.fromStream(streamedResponse);
     return _handleResponse(response);
   }

@@ -134,6 +134,10 @@ class _MovementDetectorState extends State<MovementDetector> with WidgetsBinding
       if (!mounted) { timer.cancel(); return; }
       if (_countdownNotifier.value > 0) {
         _countdownNotifier.value--;
+        if (_countdownNotifier.value == 0) {
+           timer.cancel();
+           _triggerSOS();
+        }
       } else {
         timer.cancel();
         _triggerSOS();
@@ -142,12 +146,16 @@ class _MovementDetectorState extends State<MovementDetector> with WidgetsBinding
   }
 
 
-  void _triggerSOS() async {
+  void _triggerSOS({BuildContext? dialogContext}) async {
+    _timer?.cancel(); // Stop timer immediately
     if (!_isAlerting || !mounted) return;
 
-    if (Navigator.of(context, rootNavigator: true).canPop()) {
-      Navigator.of(context, rootNavigator: true).pop();
+    // Dismiss the dialog immediately using the most reliable context
+    final navContext = dialogContext ?? context;
+    if (Navigator.of(navContext, rootNavigator: true).canPop()) {
+      Navigator.of(navContext, rootNavigator: true).pop();
     }
+    
     setState(() => _isAlerting = false);
 
     _tts.speak("Emergency activated. Contacting all trusted people automatically.");
@@ -225,6 +233,10 @@ class _MovementDetectorState extends State<MovementDetector> with WidgetsBinding
       }
 
       debugPrint('🚨 [SOS] Step 3: Calling backend at ${AppConstants.apiBaseUrl}/emergency/alert ...');
+      
+      // Start recording in background immediately so it captures the emergency situation
+      _recordEmergencyAudio(token, contacts);
+
       final response = await _apiService.triggerEmergencyAlert(token, {
         'userId': user?['email'],
         'location': {
@@ -266,14 +278,17 @@ class _MovementDetectorState extends State<MovementDetector> with WidgetsBinding
     }
   }
 
-  void _cancelAlert() {
+  void _cancelAlert({BuildContext? dialogContext}) {
     _timer?.cancel();
+    if (!_isAlerting || !mounted) return;
+
+    final navContext = dialogContext ?? context;
+    if (Navigator.of(navContext, rootNavigator: true).canPop()) {
+      Navigator.of(navContext, rootNavigator: true).pop();
+    }
     setState(() => _isAlerting = false);
     // Tell the background service to cancel its 15s timer too
     FlutterBackgroundService().invoke('cancelAlert');
-    if (Navigator.of(context, rootNavigator: true).canPop()) {
-      Navigator.of(context, rootNavigator: true).pop();
-    }
     _tts.speak("Safety confirmed. Emergency cancelled.");
   }
 
@@ -315,9 +330,12 @@ class _MovementDetectorState extends State<MovementDetector> with WidgetsBinding
   void _showAlertDialog() {
     showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => PopScope(
-        canPop: false,
+      barrierDismissible: true, // Allow clicking outside to dismiss
+      builder: (dialogContext) => PopScope(
+        canPop: true, // Allow back button to dismiss
+        onPopInvoked: (didPop) {
+           if (didPop) _timer?.cancel(); // Cancel timer if dismissed via back/barrier
+        },
         child: Dialog(
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -357,7 +375,7 @@ class _MovementDetectorState extends State<MovementDetector> with WidgetsBinding
                 const Text('seconds remaining', style: TextStyle(color: AppTheme.slate)),
                 const SizedBox(height: 40),
                 ElevatedButton(
-                  onPressed: _cancelAlert,
+                  onPressed: () => _cancelAlert(dialogContext: dialogContext),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.successGreen,
                     minimumSize: const Size(double.infinity, 60),
@@ -367,7 +385,7 @@ class _MovementDetectorState extends State<MovementDetector> with WidgetsBinding
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: _triggerSOS,
+                  onPressed: () => _triggerSOS(dialogContext: dialogContext),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppTheme.errorRed,
                     side: const BorderSide(color: AppTheme.errorRed),
