@@ -57,8 +57,7 @@
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="specialUse"
-            tools:replace="android:foregroundServiceType,android:exported"
-            android:exported="false">
+            tools:replace="android:foregroundServiceType,android:exported">
             <meta-data android:name="android.app.foreground_service.special_use_purpose"
                        android:value="Emergency shake detection for personal safety" />
         </service>
