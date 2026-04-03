@@ -57,9 +57,24 @@
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="specialUse"
+            android:exported="false"
             tools:replace="android:foregroundServiceType,android:exported">
             <meta-data android:name="android.app.foreground_service.special_use_purpose"
                        android:value="Emergency shake detection for personal safety" />
+        </service>
+        
+        <!-- Kavach Accessibility Service for Volume Button Pattern -->
+        <service
+            android:name=".KavachAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true"
+            android:label="Kavach SOS Trigger">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
         </service>
     </application>
     <!-- Required to query activities that can process text, see:

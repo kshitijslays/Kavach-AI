@@ -1,56 +1,115 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/theme.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              _buildSOSButton(context, size),
-              _buildSectionTitle('Active Security Profile'),
-              _buildSafetyStatus(),
-              _buildSectionTitle('Quick Actions'),
-              _buildQuickActions(),
-              const SizedBox(height: 100), // Space for bottom bar
-            ],
-          ),
-        ),
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
+  late AnimationController _sosController;
+  late Animation<double> _sosAnimation;
+  bool isActivated = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _sosController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    
+    _sosAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
+      CurvedAnimation(parent: _sosController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _sosController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _makeCall(String number) async {
+    final Uri url = Uri.parse('tel:$number');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      debugPrint('Could not launch dialer for $number');
+    }
+  }
+
+  void _triggerSOS() {
+    debugPrint('🚨 [UI] SOS Button Pressed, invoking background trigger...');
+    FlutterBackgroundService().invoke('forceTriggerSOS');
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('⚠️ Emergency Alert Triggered!', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+        backgroundColor: AppTheme.errorRed,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    
+    return Scaffold(
+      backgroundColor: AppTheme.background,
+      body: Stack(
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Good Morning,', style: GoogleFonts.outfit(color: AppTheme.slate, fontSize: 16, fontWeight: FontWeight.w500)),
-              Text('Shield is Active', style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.w800, color: AppTheme.deepNavy, letterSpacing: -0.5)),
-            ],
-          ),
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppTheme.trustBlue.withOpacity(0.2), width: 2),
+          // Background Gradient decoration
+          Positioned(
+            top: -100,
+            right: -50,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.trustBlue.withOpacity(0.05),
+              ),
             ),
-            padding: const EdgeInsets.all(4),
-            child: const CircleAvatar(
-              radius: 24,
-              backgroundColor: AppTheme.trustBlue,
-              child: Icon(Icons.person_rounded, color: Colors.white),
+          ),
+          
+          SafeArea(
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(child: _buildHeader()),
+                SliverToBoxAdapter(child: _buildSOSButton(size)),
+                SliverToBoxAdapter(child: _buildSectionTitle('Safety Status')),
+                SliverToBoxAdapter(child: _buildStatusCard()),
+                SliverToBoxAdapter(child: _buildSectionTitle('Quick Assistance')),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  sliver: SliverGrid.count(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                    childAspectRatio: 1.4,
+                    children: [
+                      _buildActionCard(Icons.local_police_rounded, 'Police', AppTheme.trustBlue, () => _makeCall('112')),
+                      _buildActionCard(Icons.medical_services_rounded, 'Ambulance', AppTheme.errorRed, () => _makeCall('108')),
+                      _buildActionCard(Icons.location_on_rounded, 'Safe Zone', AppTheme.successGreen, () {
+                        // Switch to Safe Route Tab (Index 1 in MainTabNavigator)
+                        // This usually requires a provider or a parent state update.
+                        // Assuming SafeRoute is index 1.
+                      }),
+                      _buildActionCard(Icons.shield_rounded, 'Protection', Colors.orange, () {}),
+                    ],
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 120)),
+              ],
             ),
           ),
         ],
@@ -58,87 +117,164 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _buildSOSButton(BuildContext context, Size size) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 40),
-        width: size.width * 0.7,
-        height: size.width * 0.7,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: AppTheme.errorRed.withOpacity(0.05),
-        ),
-        child: Center(
-          child: Container(
-            width: size.width * 0.55,
-            height: size.width * 0.55,
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 30, 24, 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Hello Explorer,', 
+                style: GoogleFonts.outfit(color: AppTheme.slate, fontSize: 16, fontWeight: FontWeight.w400)),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Text('Kavach is ', style: GoogleFonts.outfit(fontSize: 26, fontWeight: FontWeight.w700, color: AppTheme.deepNavy)),
+                  Text('Active', style: GoogleFonts.outfit(fontSize: 26, fontWeight: FontWeight.w900, color: AppTheme.trustBlue)),
+                ],
+              ),
+            ],
+          ),
+          Container(
+            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppTheme.errorRed.withOpacity(0.1),
+              border: Border.all(color: AppTheme.trustBlue.withOpacity(0.1), width: 2),
             ),
-            child: Center(
-              child: Container(
-                width: size.width * 0.42,
-                height: size.width * 0.42,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppTheme.errorRed, Color(0xFFB91C1C)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.errorRed.withOpacity(0.5),
-                      blurRadius: 30,
-                      spreadRadius: 5,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.flash_on_rounded, size: 48, color: Colors.white),
-                    const SizedBox(height: 8),
-                    Text(
-                      'SOS',
-                      style: GoogleFonts.outfit(
-                        fontSize: 40,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ],
-                ),
+            child: const CircleAvatar(
+              radius: 26,
+              backgroundColor: Colors.white,
+              child: Icon(Icons.person_rounded, color: AppTheme.deepNavy, size: 30),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSOSButton(Size size) {
+    return Container(
+      height: size.width * 0.85,
+      alignment: Alignment.center,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Animated Rings
+          ScaleTransition(
+            scale: _sosAnimation,
+            child: Container(
+              width: size.width * 0.45,
+              height: size.width * 0.45,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.errorRed.withOpacity(0.15),
               ),
             ),
           ),
-        ),
+          ScaleTransition(
+            scale: _sosAnimation.drive(Tween<double>(begin: 1.0, end: 1.4)),
+            child: Container(
+              width: size.width * 0.35,
+              height: size.width * 0.35,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.errorRed.withOpacity(0.2), width: 1.5),
+              ),
+            ),
+          ),
+          
+          // Outer Soft Glow
+          Container(
+            width: size.width * 0.5,
+            height: size.width * 0.5,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.errorRed.withOpacity(0.25),
+                  blurRadius: 40,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+          ),
+
+          // Actual Button
+          GestureDetector(
+            onLongPress: _triggerSOS,
+            onTap: () {
+               ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('⚠️ Long press to trigger SOS', style: GoogleFonts.outfit()),
+                  backgroundColor: AppTheme.deepNavy,
+                  duration: const Duration(seconds: 1),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            child: Container(
+              width: size.width * 0.42,
+              height: size.width * 0.42,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [AppTheme.errorRed, Color(0xFFDC2626)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.errorRed.withOpacity(0.4),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.emergency_rounded, color: Colors.white, size: 50),
+                  const SizedBox(height: 8),
+                  Text('SOS', 
+                    style: GoogleFonts.outfit(
+                      fontSize: 34, 
+                      fontWeight: FontWeight.w900, 
+                      color: Colors.white, 
+                      letterSpacing: 2
+                    )
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      child: Text(
-        title, 
-        style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.deepNavy)
-      ),
+      padding: const EdgeInsets.fromLTRB(28, 12, 24, 16),
+      child: Text(title, 
+        style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.deepNavy)),
     );
   }
 
-  Widget _buildSafetyStatus() {
+  Widget _buildStatusCard() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(30),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
         ],
       ),
       child: Row(
@@ -146,76 +282,73 @@ class HomePage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.successGreen.withOpacity(0.1),
+              color: AppTheme.successGreen.withOpacity(0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.verified_user_rounded, color: AppTheme.successGreen, size: 28),
+            child: const Icon(Icons.gpp_good_rounded, color: AppTheme.successGreen, size: 30),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 18),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Safe Environment', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppTheme.deepNavy, fontSize: 16)),
-                const Text('Nahargarh Road, Jaipur', style: TextStyle(color: AppTheme.slate, fontSize: 14), overflow: TextOverflow.ellipsis),
+                Text('Shield Status: Secure', 
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppTheme.deepNavy, fontSize: 17)),
+                const SizedBox(height: 2),
+                Text('Real-time monitoring active.', 
+                  style: GoogleFonts.outfit(color: AppTheme.slate, fontSize: 13, fontWeight: FontWeight.w400)),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.slate),
+          Container(
+             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+             decoration: BoxDecoration(
+               color: AppTheme.background,
+               borderRadius: BorderRadius.circular(10),
+             ),
+             child: const Icon(Icons.chevron_right_rounded, color: AppTheme.slate, size: 20),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildQuickActions() {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      mainAxisSpacing: 16,
-      crossAxisSpacing: 16,
-      childAspectRatio: 1.3,
-      children: [
-        _buildActionCard(Icons.local_police_rounded, 'Police', AppTheme.trustBlue),
-        _buildActionCard(Icons.medical_services_rounded, 'Medical', AppTheme.errorRed),
-        _buildActionCard(Icons.location_on_rounded, 'Safe Zone', AppTheme.successGreen),
-        _buildActionCard(Icons.share_location_rounded, 'Live Track', Colors.orange),
-      ],
-    );
-  }
-
-  Widget _buildActionCard(IconData icon, String title, Color color) {
+  Widget _buildActionCard(IconData icon, String title, Color color, VoidCallback onTap) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 5)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {},
-          borderRadius: BorderRadius.circular(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  shape: BoxShape.circle,
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(28),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 24),
                 ),
-                child: Icon(icon, color: color, size: 28),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title, 
-                style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 15, color: AppTheme.deepNavy)
-              ),
-            ],
+                Text(title, 
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 16, color: AppTheme.deepNavy)),
+              ],
+            ),
           ),
         ),
       ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
@@ -42,8 +43,8 @@ Future<void> initializeBackgroundService() async {
       .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(channel);
 
-  await (flutterLocalNotificationsPlugin as dynamic).initialize(
-    const InitializationSettings(
+  await flutterLocalNotificationsPlugin.initialize(
+    settings: const InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(),
     ),
@@ -53,12 +54,15 @@ Future<void> initializeBackgroundService() async {
   await service.configure(
     androidConfiguration: AndroidConfiguration(
       onStart: onStart,
-      autoStart: true,
+      autoStart: false,
       isForegroundMode: true,
       notificationChannelId: 'kavach_foreground',
       initialNotificationTitle: 'Kavach is active',
       initialNotificationContent: 'Monitoring for safety shakes',
       foregroundServiceNotificationId: 888,
+      foregroundServiceTypes: [
+        AndroidForegroundType.specialUse,
+      ],
     ),
     iosConfiguration: IosConfiguration(
       autoStart: true,
@@ -104,8 +108,8 @@ void onStart(ServiceInstance service) async {
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(bgChannel);
 
-    await (bgNotifications as dynamic).initialize(
-      const InitializationSettings(
+    await bgNotifications.initialize(
+      settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(),
       ),
@@ -125,8 +129,16 @@ void onStart(ServiceInstance service) async {
   bool isFgHandling = false;
   DateTime lastAlert = DateTime.now().subtract(const Duration(seconds: 45));
 
+  bool _isSequenceRunning = false;
+
   // Forward declaration of trigger sequence to avoid duplication
   Future<void> triggerEmergencySequence() async {
+    if (_isSequenceRunning) {
+      debugPrint('🚨 [BG] Emergency sequence already in progress, ignoring...');
+      return;
+    }
+    _isSequenceRunning = true;
+    
     try {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -135,6 +147,7 @@ void onStart(ServiceInstance service) async {
       
       if (permission == LocationPermission.deniedForever || permission == LocationPermission.denied) {
         debugPrint('❌ [BG] Location permission denied');
+        _isSequenceRunning = false;
         return;
       }
 
@@ -211,10 +224,11 @@ void onStart(ServiceInstance service) async {
         } finally {
           record.dispose();
         }
-
       }
     } catch (e) {
       debugPrint('SOS Background Error: $e');
+    } finally {
+      _isSequenceRunning = false;
     }
   }
 
@@ -238,14 +252,24 @@ void onStart(ServiceInstance service) async {
   });
 
   service.on('forceTriggerSOS').listen((event) async {
-    if (isAlerting) {
-      isAlerting = false;
-      (bgNotifications as dynamic).cancel(890);
-      await triggerEmergencySequence();
-    }
+    debugPrint('🚨 [BG] forceTriggerSOS received. Proceeding with sequence.');
+    isAlerting = false;
+    (bgNotifications as dynamic).cancel(890);
+    await triggerEmergencySequence();
   });
 
   debugPrint('👋 [BG] accelerometer listener starting...');
+  
+  // NATIVE SOS TRIGGER (Triple Power Button) - Bridged via Service.invoke from native
+  service.on('trigger_sos').listen((event) async {
+    debugPrint('🚨 [BG] NATIVE TRIPLE PRESS DETECTED via Bridge!');
+    if (!isAlerting) {
+      isAlerting = true;
+      await triggerEmergencySequence();
+      isAlerting = false;
+    }
+  });
+
   userAccelerometerEvents.listen((UserAccelerometerEvent event) async {
     final double magnitude = sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
     
