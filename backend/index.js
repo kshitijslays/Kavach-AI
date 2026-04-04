@@ -83,7 +83,7 @@ app.get("/test", (req, res) => {
             <div id="debugResult"></div>
         </div>
         <script>
-            const API_BASE = 'http://localhost:5000/api';
+            const API_BASE = window.location.origin + '/api';
             async function sendOTP() {
                 const email = document.getElementById('emailInput').value;
                 const result = document.getElementById('sendResult');
