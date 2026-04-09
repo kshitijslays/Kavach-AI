@@ -11,8 +11,7 @@ class ApiService {
       Uri.parse('$baseUrl/auth/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'password': password}),
-    ).timeout(Duration(milliseconds: AppConstants.apiTimeout));
-
+    ).timeout(const Duration(seconds: 10));
     return _handleResponse(response);
   }
 
@@ -24,8 +23,7 @@ class ApiService {
         'email': email,
         'isSignUp': isSignUp,
       }),
-    ).timeout(Duration(milliseconds: AppConstants.apiTimeout));
-
+    ).timeout(const Duration(seconds: 10));
     return _handleResponse(response);
   }
 
@@ -40,8 +38,7 @@ class ApiService {
         if (phone != null) 'phone': phone,
         if (password != null) 'password': password,
       }),
-    ).timeout(Duration(milliseconds: AppConstants.apiTimeout));
-
+    ).timeout(const Duration(seconds: 10));
     return _handleResponse(response);
   }
 
@@ -52,8 +49,7 @@ class ApiService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-    ).timeout(Duration(milliseconds: AppConstants.apiTimeout));
-
+    ).timeout(const Duration(seconds: 10));
     return _handleResponse(response);
   }
 
@@ -65,8 +61,7 @@ class ApiService {
         'Authorization': 'Bearer $token',
       },
       body: jsonEncode(data),
-    ).timeout(Duration(milliseconds: AppConstants.apiTimeout));
-
+    ).timeout(const Duration(seconds: 10));
     return _handleResponse(response);
   }
 
@@ -79,8 +74,7 @@ class ApiService {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode(data),
-      ).timeout(Duration(milliseconds: AppConstants.apiTimeout));
-
+      ).timeout(const Duration(seconds: 15));
       return _handleResponse(response);
     } catch (e) {
       print('❌ [API] Trigger Emergency Error: $e');
